@@ -311,6 +311,8 @@ sub first_pass {
 	    $tag = "enddigress", undef $default, last if /^}}/;
 	    $tag = $default, last if $default;
 	    $tag = "section", last if /^\*+\s/;
+	    $tag = "dlist", last if /^-.+::\s/;
+            $tag = "dlist", last if /^(\s+)-.+::\s/ && $last_tag eq "dlist";
 	    $tag = "nlist", last if /^[-=_+]\s/;
 	    $tag = "nlist", last if /^(\s+)[-=_+]\s/ && $last_tag eq "nlist";
 	    $tag = "picture", last if /^\s+\+-/ && $last_tag ne "code";
@@ -332,7 +334,7 @@ sub first_pass {
 }
 
 %sticky_equiv = ( "code" => "xml", "xml" => "code" );
-@sticky = qw(artwork picture nlist code xml question);
+@sticky = qw(artwork picture dlist nlist code xml question);
 %sticky = ();
 
 for (my $s = 0; $s <= $#sticky; $s++) {
@@ -769,6 +771,65 @@ sub end_nlist {
     }
 
     print "</t>\n";
+}
+
+sub start_dlist {
+    $last_ddepth = 0;
+    # print "<t>\n";
+    dlist();
+}
+
+sub dlist {
+    my ($leader, $deftag, $defcont) = ($line =~ /^(\s*)-\s+(.+)\s*::\s*(.+)$/);
+
+    $deftag =~ s/\s+$//;
+    $defcont =~ s/\s+$//;
+
+    if ($debug) {
+	print "#last ", $last_ddepth, " / ", $last_type, "\n";
+	print "#->", esc($line), "\n";
+	print "#deflist ->", esc($deftag), "->", esc($defcont), "\n";
+    }
+
+    unless ($deftag) {
+	$line =~ s/^\s+//;
+	return if $line =~ /^$/;
+	print esc($line), "\n";
+	return;
+    }
+
+    $ddepth = length($leader) + 1;
+
+    die "list indent by > 1" if $ddepth > $last_ddepth + 1;
+    die "list type changed" if $ddepth == $last_ddepth && $type ne $last_type;
+
+    my $close = $last_ddepth >= $ddepth;
+
+    while ($last_ddepth > $ddepth) {
+	print " " x $last_ddepth, "</dd>\n";
+        print " " x $last_ddepth, "</dl>\n";
+	$last_ddepth -= 1;
+    }
+
+    print " " x $ddepth, "</dd>\n" if $close;
+
+    if ($last_ddepth < $ddepth) {
+        print " " x $ddepth, "<dl>\n";
+        $last_ddepth += 1;
+    }
+
+    print "<dt>", esc($deftag), "</dt>\n";
+    print "<dd>", esc($defcont), "\n";
+}
+
+sub end_dlist {
+    while ($last_ddepth > 0) {
+	print " " x $last_ddepth, "</dd>\n";
+	print " " x $last_ddepth, "</dl>\n";
+	$last_ddepth -= 1;
+    }
+
+    # print "</t>\n";
 }
 
 sub start_abstract {
